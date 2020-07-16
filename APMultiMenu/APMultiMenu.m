@@ -134,10 +134,12 @@
            transition:(APMultiMenuTransition)transition;
 - (void)translateLeftMenu:(CGPoint)translation
                recognizer:(UIPanGestureRecognizer *)recognizer
-            withNewCenter:(CGPoint)newCenter;
+            withNewCenter:(CGPoint)newCenter
+                 animated:(BOOL)animated;
 - (void)translateRightMenu:(CGPoint)translation
                 recognizer:(UIPanGestureRecognizer *)recognizer
-             withNewCenter:(CGPoint)newCenter;
+             withNewCenter:(CGPoint)newCenter
+                  animated:(BOOL)animated;
 - (void)sendSubViewToBackForTransition:(APMultiMenuTransition)transition;
 - (void)enablePanGesture;
 - (void)removePanGesture;
@@ -805,6 +807,19 @@
     return panGesture;
 }
 
+- (BOOL)gestureRecognizerShouldBegin:(UIPanGestureRecognizer *)gestureRecognizer {
+    if (_leftMenuStatus == APMultiMenuStatusClose) {
+        CGPoint translation = [gestureRecognizer locationInView:self.mainViewController.view];
+        id targetView = [self.mainViewController.view hitTest:translation withEvent:nil];
+        
+        if ([targetView isKindOfClass:[UITableViewCell class]] || [[targetView superview] isKindOfClass:[UITableViewCell class]]) {
+            return NO;
+        }
+    }
+    
+    return YES;
+}
+
 - (void)handlePanGesture:(UIPanGestureRecognizer *)recognizer {
     CGPoint velocity = [recognizer velocityInView:recognizer.view];
     
@@ -857,10 +872,29 @@
     }
     
     if (recognizer.state == UIGestureRecognizerStateEnded) {
-        if (recognizer.view.frame.origin.x >= 0 && recognizer.view.frame.origin.x <= kMENU_WIDTH)
-            [self toggleLeftMenuWithAnimation:YES];
-        else if (recognizer.view.frame.origin.x < 0 && recognizer.view.frame.origin.x >= -1 * kMENU_WIDTH)
-            [self toggleRightMenuWithAnimation:YES];
+        if (recognizer.view.frame.origin.x >= 0 && recognizer.view.frame.origin.x <= kMENU_WIDTH ) {
+            BOOL isMenuOpened = _leftMenuStatus == APMultiMenuStatusOpen;
+            
+            if ((!isMenuOpened && recognizer.view.frame.origin.x >= kMENU_WIDTH / 3) || (isMenuOpened && kMENU_WIDTH - recognizer.view.frame.origin.x >= kMENU_WIDTH / 3)) {
+                [self toggleLeftMenuWithAnimation:YES];
+            } else {
+                CGPoint newTranslation = isMenuOpened ? CGPointMake(kMENU_WIDTH - recognizer.view.frame.origin.x, 0) : CGPointMake(-recognizer.view.frame.origin.x, 0);
+                CGPoint newCenter = CGPointMake(recognizer.view.center.x + newTranslation.x, recognizer.view.center.y);
+                
+                [self translateLeftMenu:newTranslation recognizer:recognizer withNewCenter:newCenter animated:YES];
+            }
+        } else if (recognizer.view.frame.origin.x < 0 && recognizer.view.frame.origin.x >= -1 * kMENU_WIDTH) {
+             BOOL isMenuOpened = _rightMenu == APMultiMenuStatusOpen;
+            
+             if ((!isMenuOpened && recognizer.view.frame.origin.x <= -1 * kMENU_WIDTH / 3) || (isMenuOpened && (kMENU_WIDTH - recognizer.view.frame.origin.x) <= -1 * kMENU_WIDTH / 3)) {
+                            [self toggleRightMenuWithAnimation:YES];
+                        } else {
+                            CGPoint newTranslation = isMenuOpened ? CGPointMake(kMENU_WIDTH - recognizer.view.frame.origin.x, 0) : CGPointMake(-recognizer.view.frame.origin.x, 0);
+                            CGPoint newCenter = CGPointMake(recognizer.view.center.x + newTranslation.x, recognizer.view.center.y);
+                            
+                            [self translateRightMenu:newTranslation recognizer:recognizer withNewCenter:newCenter animated:YES];
+                        }
+        }
     }
 }
 
@@ -872,50 +906,75 @@
 {
     [self sendSubViewToBackForTransition:transition];
     
-    if (menuType == APMultiMenuTypeLeftMenu)
+    if (menuType == APMultiMenuTypeLeftMenu) {
         [self translateLeftMenu:translation
                      recognizer:recognizer
-                  withNewCenter:newCenter];
-    else if (menuType == APMultiMenuTypeRightMenu)
+                  withNewCenter:newCenter
+                       animated:NO];
+    } else if (menuType == APMultiMenuTypeRightMenu) {
         [self translateRightMenu:translation
                       recognizer:recognizer
-                   withNewCenter:newCenter];
+                   withNewCenter:newCenter
+                        animated:NO];
+    }
 }
 
 - (void)translateLeftMenu:(CGPoint)translation
                recognizer:(UIPanGestureRecognizer *)recognizer
             withNewCenter:(CGPoint)newCenter
+                 animated:(BOOL)animated
 {
     if (!_leftMenuViewController)
         return;
     
-    CGPoint center = _leftMenu.center;
+    CGPoint center = self.leftMenu.center;
     
-    if (_menuIndentationEnabled)
+    if (self.menuIndentationEnabled) {
         center.x += (translation.x / kMENU_INDENT_DIV);
+    }
     
-    _leftMenu.center = center;
-    
-    recognizer.view.center = newCenter;
-    [recognizer setTranslation:CGPointZero inView:self.view];
+    if (animated) {
+        [UIView animateWithDuration:self.animationDuration animations:^{
+            self.leftMenu.center = center;
+            
+            recognizer.view.center = newCenter;
+            [recognizer setTranslation:CGPointZero inView:self.view];
+        }];
+    } else {
+        _leftMenu.center = center;
+        
+        recognizer.view.center = newCenter;
+        [recognizer setTranslation:CGPointZero inView:self.view];
+    }
 }
 
 - (void)translateRightMenu:(CGPoint)translation
                 recognizer:(UIPanGestureRecognizer *)recognizer
              withNewCenter:(CGPoint)newCenter
+                  animated:(BOOL)animated
 {
     if (!_rightMenuViewController)
         return;
     
     CGPoint center = _rightMenu.center;
     
-    if (_menuIndentationEnabled)
+    if (_menuIndentationEnabled) {
         center.x += (translation.x / kMENU_INDENT_DIV);
+    }
     
-    _rightMenu.center = center;
-    
-    recognizer.view.center = newCenter;
-    [recognizer setTranslation:CGPointZero inView:self.view];
+    if (animated) {
+        [UIView animateWithDuration:self.animationDuration animations:^{
+            self.rightMenu.center = center;
+            
+            recognizer.view.center = newCenter;
+            [recognizer setTranslation:CGPointZero inView:self.view];
+        }];
+    } else {
+        _rightMenu.center = center;
+        
+        recognizer.view.center = newCenter;
+        [recognizer setTranslation:CGPointZero inView:self.view];
+    }
 }
 
 - (void)sendSubViewToBackForTransition:(APMultiMenuTransition)transition {
